@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>弹珠解谜 Marble Puzzle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --grid: #1e2936;
+      --grid粗: #2a3a4d;
+      --line: #38bdf8;
+      --line-glow: rgba(56,189,248,0.4);
+      --marble: #f97316;
+      --marble-glow: rgba(249,115,22,0.5);
+      --cup: #22c55e;
+      --cup-glow: rgba(34,197,94,0.4);
+      --obstacle: #64748b;
+      --text: #e2e8f0;
+      --accent: #fbbf24;
+      --overlay-bg: rgba(13,17,23,0.85);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── Top Bar ── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      height: 44px;
+      background: #161b22;
+      border-bottom: 1px solid #2a3a4d;
+      flex-shrink: 0;
+    }
+    #topbar .left { font-size: 14px; font-weight: 700; color: var(--text); }
+    #topbar .stars { font-size: 16px; letter-spacing: 2px; }
+    #topbar .right { display: flex; gap: 8px; }
+
+    /* ── Canvas Area ── */
+    #canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    /* ── Bottom Controls ── */
+    #controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      height: 56px;
+      background: #161b22;
+      border-top: 1px solid #2a3a4d;
+      flex-shrink: 0;
+      padding: 0 16px;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: 2px solid transparent;
+    }
+    .btn-primary {
+      background: var(--line);
+      color: #0d1117;
+      border-color: var(--line);
+    }
+    .btn-primary:hover { background: #0ea5e9; border-color: #0ea5e9; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: #2a3a4d;
+    }
+    .btn-ghost:hover { border-color: var(--line); color: var(--line); }
+
+    /* ── Overlay (Win/Lose/Start) ── */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--overlay-bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 10;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #overlay.visible {
+      opacity: 1;
+      pointer-events: all;
+    }
+    #overlay .title {
+      font-size: 28px;
+      font-weight: 700;
+    }
+    #overlay .stars-display {
+      font-size: 40px;
+      letter-spacing: 8px;
+    }
+    #overlay .subtitle {
+      font-size: 13px;
+      color: #94a3b8;
+      text-align: center;
+      max-width: 280px;
+    }
+    #overlay .btn {
+      font-size: 15px;
+      padding: 10px 28px;
+    }
+
+    /* ── Mode indicator ── */
+    #mode-tag {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: rgba(56,189,248,0.15);
+      color: var(--line);
+      border: 1px solid rgba(56,189,248,0.3);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="left">Level <span id="levelNum">1</span></div>
+  <div class="stars" id="totalStars">☆☆☆</div>
+  <div class="right">
+    <button class="btn btn-ghost" id="resetBtn">↺ Reset</button>
+  </div>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="gameCanvas"></canvas>
+  <div id="mode-tag">✏️ DRAW</div>
+
+  <!-- Overlays -->
+  <div id="overlay">
+    <div class="title" id="overlayTitle">Marble Puzzle</div>
+    <div class="stars-display" id="overlayStars"></div>
+    <div class="subtitle" id="overlaySub">画线引导弹珠落入绿色的目标杯</div>
+    <button class="btn btn-primary" id="overlayBtn">开始</button>
+  </div>
+</div>
+
+<div id="controls">
+  <button class="btn btn-ghost" id="clearBtn">🗑️ Clear</button>
+  <button class="btn btn-primary" id="playBtn">▶ Play</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ── Matter.js aliases ──────────────────────────────────────────
+  const { Engine, World, Bodies, Body, Events, Runner, Composite } = Matter;
+
+  // ── Level data ─────────────────────────────────────────────────
+  // marble: {x,y} fraction of canvas; cup: {x,y} pixel; obstacles: [{x,y,w,h}]
+  const LEVELS = [
+    {
+      name: "第一关",
+      marble: { fx: 0.5, fy: 0.08 },
+      cup: { x: 0.75, y: 0.82 },
+      obstacles: []
+    },
+    {
+      name: "第二关",
+      marble: { fx: 0.3, fy: 0.08 },
+      cup: { x: 0.7, y: 0.82 },
+      obstacles: [
+        { fx: 0.5, fy: 0.45, fw: 0.4, fh: 0.04 }
+      ]
+    },
+    {
+      name: "第三关",
+      marble: { fx: 0.2, fy: 0.08 },
+      cup: { x: 0.8, y: 0.82 },
+      obstacles: [
+        { fx: 0.45, fy: 0.3, fw: 0.04, fh: 0.25 },
+        { fx: 0.65, fy: 0.55, fw: 0.04, fh: 0.25 }
+      ]
+    },
+    {
+      name: "第四关",
+      marble: { fx: 0.5, fy: 0.08 },
+      cup: { x: 0.5, y: 0.82 },
+      obstacles: [
+        { fx: 0.35, fy: 0.35, fw: 0.3, fh: 0.04 },
+        { fx: 0.35, fy: 0.55, fw: 0.3, fh: 0.04 },
+        { fx: 0.42, fy: 0.35, fw: 0.04, fh: 0.24 }
+      ]
+    },
+    {
+      name: "第五关",
+      marble: { fx: 0.15, fy: 0.08 },
+      cup: { x: 0.85, y: 0.82 },
+      obstacles: [
+        { fx: 0.35, fy: 0.25, fw: 0.04, fh: 0.2 },
+        { fx: 0.55, fy: 0.45, fw: 0.04, fh: 0.2 },
+        { fx: 0.35, fy: 0.65, fw: 0.04, fh: 0.2 },
+        { fx: 0.7, fy: 0.55, fw: 0.25, fh: 0.04 }
+      ]
+    }
+  ];
+
+  // ── DOM refs ───────────────────────────────────────────────────
+  const canvas     = document.getElementById('gameCanvas');
+  const ctx        = canvas.getContext('2d');
+  const playBtn    = document.getElementById('playBtn');
+  const clearBtn   = document.getElementById('clearBtn');
+  const resetBtn   = document.getElementById('resetBtn');
+  const overlay    = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayStars = document.getElementById('overlayStars');
+  const overlaySub = document.getElementById('overlaySub');
+  const overlayBtn = document.getElementById('overlayBtn');
+  const modeTag    = document.getElementById('mode-tag');
+  const levelNumEl = document.getElementById('levelNum');
+  const totalStarsEl = document.getElementById('totalStars');
+
+  // ── Game state ─────────────────────────────────────────────────
+  let W = 0, H = 0;
+  let engine, world, runner;
+  let marbleBody = null;
+  let cupBody = null;
+  let obstacleBodies = [];
+  let lineBodies = [];
+  let drawnLines = []; // [{x1,y1,x2,y2}]
+  let currentLine = null; // line being drawn
+  let gameState = 'START'; // START | DRAW | PLAY | WIN | LOSE
+  let currentLevel = 0;
+  let totalStars = 0;
+  let marbleTrail = []; // [{x,y,age}]
+  let animFrame = null;
+
+  // ── Resize ─────────────────────────────────────────────────────
+  function resize() {
+    const wrap = document.getElementById('canvas-wrap');
+    W = canvas.width  = wrap.clientWidth;
+    H = canvas.height = wrap.clientHeight;
+  }
+  window.addEventListener('resize', () => { resize(); if (gameState !== 'START') reloadLevel(); });
+  resize();
+
+  // ── Physics init ───────────────────────────────────────────────
+  function initPhysics() {
+    engine = Engine.create({ gravity: { x: 0, y: 1.0 } });
+    world  = engine.world;
+    runner = Runner.create();
+  }
+
+  // ── Level loading ───────────────────────────────────────────────
+  function px(frac) { return frac * W; }
+
+  function loadLevel(idx) {
+    // Clear physics world
+    if (engine) {
+      World.clear(world);
+      Engine.clear(engine);
+    }
+    initPhysics();
+
+    lineBodies = [];
+    drawnLines = [];
+    marbleTrail = [];
+    currentLine = null;
+
+    const lvl = LEVELS[idx];
+    const mx = px(lvl.marble.fx);
+    const my = lvl.marble.fy * H;
+    const cw = lvl.cup.x * W;
+    const ch = lvl.cup.y * H;
+
+    // Marble
+    marbleBody = Bodies.circle(mx, my, Math.min(W, H) * 0.025, {
+      restitution: 0.4,
+      friction: 0.05,
+      density: 0.001,
+      label: 'marble',
+      render: { visible: false }
+    });
+
+    // Cup sensor
+    const cupW = Math.min(W, H) * 0.08;
+    const cupH = Math.min(W, H) * 0.06;
+    cupBody = Bodies.rectangle(cw, ch, cupW, cupH, {
+      isStatic: true,
+      isSensor: true,
+      label: 'cup',
+      render: { visible: false }
+    });
+
+    // Walls (floor only — let marble fall off to lose)
+    const wallT = 40;
+    const floor = Bodies.rectangle(W / 2, H + wallT / 2 + 5, W + 200, wallT, {
+      isStatic: true, label: 'floor', render: { visible: false }
+    });
+
+    World.add(world, [marbleBody, cupBody, floor]);
+
+    // Obstacles
+    obstacleBodies = [];
+    for (const obs of lvl.obstacles) {
+      const ob = Bodies.rectangle(
+        px(obs.fx), obs.fy * H,
+        px(obs.fw), obs.fh * H,
+        { isStatic: true, friction: 0.3, restitution: 0.3, label: 'obstacle', render: { visible: false } }
+      );
+      obstacleBodies.push(ob);
+      World.add(world, ob);
+    }
+
+    // Collision: marble vs cup → win
+    Events.on(engine, 'collisionStart', (ev) => {
+      for (const pair of ev.pairs) {
+        if ((pair.bodyA.label === 'marble' && pairBodyLabel(pair.bodyB) === 'cup') ||
+            (pairBodyLabel(pair.bodyB) === 'marble' && pair.bodyA.label === 'cup')) {
+          if (gameState === 'PLAY') triggerWin();
+        }
+      }
+    });
+
+    gameState = 'DRAW';
+    setModeUI('DRAW');
+    levelNumEl.textContent = idx + 1;
+  }
+
+  function pairBodyLabel(b) { return b && b.label; }
+
+  function reloadLevel() {
+    loadLevel(currentLevel);
+  }
+
+  // ── Drawing ─────────────────────────────────────────────────────
+  let isDrawing = false;
+
+  function getPos(e) {
+    const r = canvas.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return {
+      x: (src.clientX - r.left) * (W / r.width),
+      y: (src.clientY - r.top)  * (H / r.height)
+    };
+  }
+
+  canvas.addEventListener('mousedown', onDrawStart);
+  canvas.addEventListener('mousemove', onDrawMove);
+  canvas.addEventListener('mouseup',   onDrawEnd);
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); onDrawStart(e); }, { passive: false });
+  canvas.addEventListener('touchmove',  e => { e.preventDefault(); onDrawMove(e);  }, { passive: false });
+  canvas.addEventListener('touchend',   e => { e.preventDefault(); onDrawEnd(e);    }, { passive: false });
+
+  function onDrawStart(e) {
+    if (gameState !== 'DRAW') return;
+    isDrawing = true;
+    const p = getPos(e);
+    currentLine = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+  }
+
+  function onDrawMove(e) {
+    if (!isDrawing || gameState !== 'DRAW') return;
+    const p = getPos(e);
+    currentLine.x2 = p.x;
+    currentLine.y2 = p.y;
+  }
+
+  function onDrawEnd(e) {
+    if (!isDrawing || gameState !== 'DRAW') return;
+    isDrawing = false;
+    if (!currentLine) return;
+    const dx = currentLine.x2 - currentLine.x1;
+    const dy = currentLine.y2 - currentLine.y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 10) { currentLine = null; return; } // too short
+
+    drawnLines.push({ ...currentLine });
+    addLinePhysics(currentLine);
+    currentLine = null;
+  }
+
+  function addLinePhysics(line) {
+    const dx = line.x2 - line.x1;
+    const dy = line.y2 - line.y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const cx  = (line.x1 + line.x2) / 2;
+    const cy  = (line.y1 + line.y2) / 2;
+    const angle = Math.atan2(dy, dx);
+    const thick = 4;
+
+    const rect = Bodies.rectangle(cx, cy, len, thick, {
+      isStatic: true,
+      angle,
+      friction: 0.3,
+      restitution: 0.3,
+      label: 'playerLine',
+      render: { visible: false }
+    });
+    lineBodies.push(rect);
+    World.add(world, rect);
+  }
+
+  // ── Play / Reset ────────────────────────────────────────────────
+  playBtn.addEventListener('click', () => {
+    if (gameState === 'DRAW') startSimulation();
+    else if (gameState === 'PLAY') stopSimulation();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if (gameState === 'PLAY' || gameState === 'WIN' || gameState === 'LOSE') {
+      stopSimulation();
+      loadLevel(currentLevel);
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (gameState === 'PLAY') stopSimulation();
+    drawnLines = [];
+    lineBodies.forEach(b => World.remove(world, b));
+    lineBodies = [];
+    marbleTrail = [];
+    gameState = 'DRAW';
+    setModeUI('DRAW');
+  });
+
+  function startSimulation() {
+    gameState = 'PLAY';
+    setModeUI('PLAY');
+    Runner.run(runner, engine);
+  }
+
+  function stopSimulation() {
+    Runner.stop(runner);
+  }
+
+  // ── Win / Lose ──────────────────────────────────────────────────
+  function triggerWin() {
+    gameState = 'WIN';
+    Runner.stop(runner);
+    const stars = 3; // always 3 for now (could add time tracking later)
+    totalStars += stars;
+    updateTotalStars();
+    showOverlay('🎉过关！', '★★★', '进入下一关', () => {
+      hideOverlay();
+      currentLevel = (currentLevel + 1) % LEVELS.length;
+      loadLevel(currentLevel);
+    });
+  }
+
+  function triggerLose() {
+    gameState = 'LOSE';
+    Runner.stop(runner);
+    showOverlay('💥失败', '', '点击重试', () => {
+      hideOverlay();
+      loadLevel(currentLevel);
+    });
+  }
+
+  function updateTotalStars() {
+    const s = totalStars % 15; // wrap every 15 for display sanity
+    totalStarsEl.textContent = '★'.repeat(s) + '☆'.repeat(Math.max(0, 15 - s));
+    totalStarsEl.textContent = totalStarsEl.textContent || '☆☆☆';
+  }
+
+  // ── Overlay helpers ─────────────────────────────────────────────
+  function showOverlay(title, stars, sub, cb) {
+    overlayTitle.textContent = title;
+    overlayStars.textContent = stars;
+    overlaySub.textContent   = sub;
+    overlayBtn.textContent   = cb ? '下一关' : '开始';
+    overlayBtn.onclick = cb || (() => { hideOverlay(); loadLevel(currentLevel); });
+    overlay.classList.add('visible');
+  }
+
+  function hideOverlay() {
+    overlay.classList.remove('visible');
+  }
+
+  // ── Mode UI ─────────────────────────────────────────────────────
+  function setModeUI(mode) {
+    if (mode === 'DRAW') {
+      modeTag.textContent = '✏️ DRAW';
+      modeTag.style.background = 'rgba(56,189,248,0.15)';
+      modeTag.style.color = '#38bdf8';
+      modeTag.style.borderColor = 'rgba(56,189,248,0.3)';
+      playBtn.textContent = '▶ Play';
+      playBtn.disabled = false;
+      canvas.style.cursor = 'crosshair';
+    } else if (mode === 'PLAY') {
+      modeTag.textContent = '▶ PLAYING';
+      modeTag.style.background = 'rgba(249,115,22,0.15)';
+      modeTag.style.color = '#f97316';
+      modeTag.style.borderColor = 'rgba(249,115,22,0.3)';
+      playBtn.textContent = '⏸ Pause';
+      playBtn.disabled = false;
+      canvas.style.cursor = 'default';
+    }
+  }
+
+  // ── Render loop ─────────────────────────────────────────────────
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+
+    drawGrid();
+    drawObstacles();
+    drawPlayerLines();
+    drawCurrentLine();
+    drawCup();
+    drawMarble();
+    drawTrail();
+
+    // Lose check
+    if (gameState === 'PLAY' && marbleBody) {
+      if (marbleBody.position.y > H + 80) {
+        triggerLose();
+      }
+    }
+
+    animFrame = requestAnimationFrame(render);
+  }
+
+  function drawGrid() {
+    const gSmall = Math.min(W, H) * 0.04;
+    const gLarge = gSmall * 4;
+    ctx.strokeStyle = '#1e2936';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < W; x += gSmall) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = 0; y < H; y += gSmall) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    ctx.strokeStyle = '#2a3a4d';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += gLarge) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = 0; y < H; y += gLarge) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+  }
+
+  function drawObstacles() {
+    for (const ob of obstacleBodies) {
+      const v = ob.vertices;
+      ctx.beginPath();
+      ctx.moveTo(v[0].x, v[0].y);
+      for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
+      ctx.closePath();
+      ctx.fillStyle = '#334155';
+      ctx.fill();
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  function drawPlayerLines() {
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(56,189,248,0.6)';
+    ctx.shadowBlur = 8;
+    for (const ln of drawnLines) {
+      ctx.beginPath();
+      ctx.moveTo(ln.x1, ln.y1);
+      ctx.lineTo(ln.x2, ln.y2);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  function drawCurrentLine() {
+    if (!currentLine) return;
+    ctx.strokeStyle = 'rgba(56,189,248,0.5)';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(currentLine.x1, currentLine.y1);
+    ctx.lineTo(currentLine.x2, currentLine.y2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawCup() {
+    if (!cupBody) return;
+    const { x, y } = cupBody.position;
+    const cw = Math.min(W, H) * 0.08;
+    const ch = Math.min(W, H) * 0.06;
+    const opening = cw * 0.7;
+
+    ctx.shadowColor = 'rgba(34,197,94,0.7)';
+    ctx.shadowBlur = 20;
+    ctx.strokeStyle = '#22c55e';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Cup shape (U)
+    ctx.beginPath();
+    ctx.moveTo(x - opening / 2, y - ch / 2);
+    ctx.lineTo(x - cw / 2, y + ch / 2);
+    ctx.lineTo(x + cw / 2, y + ch / 2);
+    ctx.lineTo(x + opening / 2, y - ch / 2);
+    ctx.stroke();
+
+    // Glow fill
+    ctx.shadowBlur = 0;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, cw);
+    grad.addColorStop(0, 'rgba(34,197,94,0.15)');
+    grad.addColorStop(1, 'rgba(34,197,94,0)');
+    ctx.beginPath();
+    ctx.ellipse(x, y, opening / 2, ch / 3, 0, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  function drawMarble() {
+    if (!marbleBody) return;
+    const { x, y } = marbleBody.position;
+    const r = marbleBody.circleRadius;
+
+    // Glow
+    ctx.shadowColor = 'rgba(249,115,22,0.7)';
+    ctx.shadowBlur = 18;
+
+    const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+    grad.addColorStop(0, '#fdba74');
+    grad.addColorStop(0.5, '#f97316');
+    grad.addColorStop(1, '#c2410c');
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Rim
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#ea580c';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  function drawTrail() {
+    if (!marbleBody || gameState !== 'PLAY') return;
+    marbleTrail.push({ x: marbleBody.position.x, y: marbleBody.position.y, age: 0 });
+    if (marbleTrail.length > 30) marbleTrail.shift();
+
+    for (let i = 0; i < marbleTrail.length; i++) {
+      const t = marbleTrail[i];
+      const alpha = (i / marbleTrail.length) * 0.35;
+      const r = marbleBody.circleRadius * (i / marbleTrail.length) * 0.8;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(249,115,22,${alpha})`;
+      ctx.fill();
+      t.age++;
+    }
+  }
+
+  // ── Start screen ────────────────────────────────────────────────
+  function showStartScreen() {
+    showOverlay(
+      '弹珠解谜',
+      '✨',
+      '在画布上画线，引导弹珠落入绿色目标杯',
+      null
+    );
+    overlayBtn.textContent = '开始游戏';
+    overlayBtn.onclick = () => {
+      hideOverlay();
+      loadLevel(currentLevel);
+    };
+    overlay.classList.add('visible');
+    gameState = 'START';
+    // still render bg
+    render();
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────
+  initPhysics();
+  showStartScreen();
+  render();
+
+})();
+</script>
+</body>
+</html>
