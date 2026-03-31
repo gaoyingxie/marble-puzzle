@@ -161,7 +161,7 @@
 <body>
 
 <div id="topbar">
-  <div class="left">Level <span id="levelNum">1</span></div>
+  <div class="left">Level <span id="levelNum">1</span><span id="versionTag" style="font-size:11px;color:#64748b;font-weight:400;margin-left:8px;">v1.0.1</span></div>
   <div class="stars" id="totalStars">☆☆☆</div>
   <div class="right">
     <button class="btn btn-ghost" id="resetBtn">↺ 重置</button>
@@ -284,7 +284,7 @@
 
   // ── Physics init ───────────────────────────────────────────────
   function initPhysics() {
-    engine = Engine.create({ gravity: { x: 0, y: 1.5 } });
+    engine = Engine.create({ gravity: { x: 0, y: 2.5 } });
     world  = engine.world;
     runner = Runner.create();
   }
@@ -706,7 +706,7 @@
   // ── Start screen ────────────────────────────────────────────────
   function showStartScreen() {
     showOverlay(
-      '弹珠解谜',
+      '弹珠解谜 v1.0.1',
       '✨',
       '在画布上画线，引导弹珠落入绿色目标杯',
       null
