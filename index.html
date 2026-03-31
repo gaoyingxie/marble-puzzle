@@ -164,7 +164,7 @@
   <div class="left">Level <span id="levelNum">1</span></div>
   <div class="stars" id="totalStars">☆☆☆</div>
   <div class="right">
-    <button class="btn btn-ghost" id="resetBtn">↺ Reset</button>
+    <button class="btn btn-ghost" id="resetBtn">↺ 重置</button>
   </div>
 </div>
 
@@ -367,8 +367,20 @@
 
   function pairBodyLabel(b) { return b && b.label; }
 
-  function reloadLevel() {
-    loadLevel(currentLevel);
+  // ── Reset marble only (keep lines) ─────────────────────────────
+  function resetMarbleOnly() {
+    stopSimulation();
+    const lvl = LEVELS[currentLevel];
+    const mx = px(lvl.marble.fx);
+    const my = lvl.marble.fy * H;
+    if (marbleBody) {
+      Body.setPosition(marbleBody, { x: mx, y: my });
+      Body.setVelocity(marbleBody, { x: 0, y: 0 });
+      Body.setAngularVelocity(marbleBody, 0);
+    }
+    marbleTrail = [];
+    gameState = 'DRAW';
+    setModeUI('DRAW');
   }
 
   // ── Drawing ─────────────────────────────────────────────────────
@@ -446,20 +458,13 @@
   });
 
   resetBtn.addEventListener('click', () => {
-    if (gameState === 'PLAY' || gameState === 'WIN' || gameState === 'LOSE') {
-      stopSimulation();
-      loadLevel(currentLevel);
-    }
+    // Reset marble position, keep drawn lines
+    resetMarbleOnly();
   });
 
   clearBtn.addEventListener('click', () => {
-    if (gameState === 'PLAY') stopSimulation();
-    drawnLines = [];
-    lineBodies.forEach(b => World.remove(world, b));
-    lineBodies = [];
-    marbleTrail = [];
-    gameState = 'DRAW';
-    setModeUI('DRAW');
+    // Full reset: clear lines + reload level
+    loadLevel(currentLevel);
   });
 
   function startSimulation() {
